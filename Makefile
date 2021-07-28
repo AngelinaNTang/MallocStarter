@@ -67,11 +67,11 @@ test/src/%.o: test/src/%.cpp $(HEADERS) $(TEST_HEADERS)
 
 # Link your executable
 $(BIN): $(OBJ) Main.o
-	$(CC) -o $(BIN) $(OBJ) Main.o
+	$(CC) -o $(BIN) $(OBJ) Main.o -lpthread
 
 # Link the test exectuable
 $(TEST_BIN): $(OBJ) $(TEST_OBJ) $(HEADERS) $(TEST_HEADERS) TestMain.o
-	$(CC) -o $(TEST_BIN) $(OBJ) $(TEST_OBJ) TestMain.o
+	$(CC) -o $(TEST_BIN) $(OBJ) $(TEST_OBJ) TestMain.o -lpthread
 
 # Delete everything.
 clean:
