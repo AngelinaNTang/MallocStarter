@@ -1,7 +1,11 @@
 #pragma once
 
+using namespace std;
+
 #include <signal.h>
 #include <atomic>
+#include <iostream>
+#include <sys/mman.h>
 
 // You can assume this as your page size. On some OSs (e.g. macOS), 
 // it may in fact be larger and you'll waste memory due to internal 
@@ -46,11 +50,18 @@ public:
      * 
      * If this is a large allocation, the caller should set arenaSize to 0.
      */
-    static MMapObject* alloc(size_t size, size_t arenaSize) {
+    static MMapObject* alloc(size_t size, size_t arenaSize) 
+    {
+        void* ptr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, 0, 0);
+        if (ptr == MAP_FAILED)
+        {
+            return nullptr;
+        }
+        MMapObject* obj = (MMapObject*)ptr;
+        obj->m_mmapSize = size;
+        obj->m_arenaSize = arenaSize;
         s_outstandingPages++;
-
-        // TODO: mmap allocation code
-        return nullptr;
+        return obj;
     }
 
     /**
@@ -64,6 +75,15 @@ public:
      * jump back to the nearest multiple of page size and that will be the MMapObject*.
      */
     static void dealloc(void* obj) {
+        uintptr_t n = reinterpret_cast<uintptr_t>(obj); 
+        uintptr_t remainder = n % pageSize;
+        n = n - remainder;
+        MMapObject* map = reinterpret_cast<MMapObject*>(n);
+        int ret = munmap(map, map->mmapSize());
+        if (ret == -1) {
+            raise(SIGTRAP);
+        } 
+        
         size_t old = s_outstandingPages--;
 
         // If there previously 0 pages, then we goofed and tried to free more pages
@@ -73,8 +93,6 @@ public:
         if (old == 0) {
             raise(SIGTRAP);
         }
-
-        // TODO: munmap deallocation code
     }
 
     /**
@@ -104,20 +122,24 @@ public:
      * The returned address must be 64-bit aligned.
      */
     static void* alloc(size_t size) {
-        // TODO: allocate the BigAlloc.
-        return nullptr;
+        size_t fullSize = size + sizeof(BigAlloc);
+        void* ptr = MMapObject::alloc(fullSize, 0);
+        BigAlloc* obj = (BigAlloc*)ptr;
+        return &obj->m_data[0];
     }
 };
 
 // This is the data overlay for your Arena allocator.
 // It inherits from MMapObject, and thus has a size_
 class Arena : public MMapObject {
-    // This inherits from MMapObject, so it also has the mmapSize and arenSize
+    // This inherits from MMapObject, so it also has the mmapSize and arenaSize
     // members as well.
 
     // You'll need some means of tracking the number of freed items in this arena
     // in a thread-safe manner. That should go here.
-    // mything thing = stuff;
+    std::atomic<size_t> freedItems;
+    std::atomic<size_t> totalSpaceUsed;
+    std::atomic<size_t> totalSpaceUsedNoHeader;
 
     // A pointer to the next free address in the arena.
     char* m_next;
@@ -140,8 +162,15 @@ public:
      * MMapObject::alloc() and coerce the result into an Arena*.
      */
     static Arena* create(uint32_t itemSize) {
-        // TODO: create and initialize the arena.
-        return nullptr;
+        void* ptr = MMapObject::alloc(pageSize, itemSize);
+        Arena* obj = (Arena*)ptr;
+        obj->m_next = &obj->m_data[0];
+        obj->totalSpaceUsed = sizeof(Arena);
+        if (sizeof(obj) % 8 != 0)
+        {
+            raise(SIGTRAP);
+        }
+        return obj;
     }
 
     /**
@@ -149,8 +178,14 @@ public:
      * have already exceeded the bounds of the arena.
      */
     void* alloc() {
-        // TODO: return a pointer to an item in this arena. We should return nullptr
-        // if there are no more slots in which to allocate data.
+        if (this->full() != true)
+        {
+            char* temp = this->m_next;
+            totalSpaceUsed += arenaSize();
+            totalSpaceUsedNoHeader += arenaSize();
+            this->m_next = &this->m_data[totalSpaceUsed.load()];
+            return temp;
+        }
         return nullptr;
     }
 
@@ -159,7 +194,11 @@ public:
      * has no more allocation slots and everything is free'd.
      */
     bool free() {
-        // TODO: actually free an item the arena.
+        freedItems++;
+        if (freedItems.load() == (totalSpaceUsedNoHeader.load() / arenaSize()) && full())
+        {
+            return true;
+        }
         return false;
     }
 
@@ -167,7 +206,10 @@ public:
      * Whether or not this arena can hold more items.
      */
     bool full() {
-        // TODO: acutally compute full()
+        if (totalSpaceUsed.load() + arenaSize() > pageSize)
+        {
+            return true;
+        }
         return false;
     }
 
@@ -196,7 +238,54 @@ public:
      * it will be allocated using BigAlloc.
      */
     void* alloc(size_t bytes) {
-        // TODO: implement alloc
+        if (bytes <= 8)
+        {
+            Arena* arena = m_arenas[0];
+            if (arena == nullptr)
+            {
+                Arena* newArena = Arena::create(8);
+                Arena* m_arenas[0] = newArena;
+                Arena* temp = newArena->alloc();
+                m_arenas[0] = temp;
+            }
+            else
+            {
+                Arena* temp = arena->alloc();
+                m_arenas[0] = temp;
+            }
+            
+        }
+        else if (bytes <= 16)
+        {
+        }
+        else if (bytes <= 32)
+        {
+            // 2
+        }
+        else if (bytes <= 64)
+        {
+            // 3
+        }
+        else if (bytes <= 128)
+        {
+            // 4
+        }
+        else if (bytes <= 256)
+        {
+            // 5
+        }
+        else if (bytes <= 512)
+        {
+            // 6
+        }
+        else if (bytes <= 1024)
+        {
+            // 7
+        }
+        else
+        {
+            // big alloc
+        }
         return nullptr;
     }
 
