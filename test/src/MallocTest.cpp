@@ -200,15 +200,12 @@ void canMallocAndFreeABunchOfStuff() {
 
         for (size_t i = 0; i < numIterations; i++) {
             size_t size = getRandomSize();
-
             auto ptr = (volatile char*)myMalloc(size);
-
             ASSERT_TRUE(ptr != nullptr);
 
             for (size_t j = 0; j < size; j++) {
                 ptr[j] = 0xDE;
             }
-
             addresses.push_back(ptr);
         }
 

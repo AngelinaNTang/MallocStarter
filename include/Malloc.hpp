@@ -80,10 +80,7 @@ public:
         n = n - remainder;
         MMapObject* map = reinterpret_cast<MMapObject*>(n);
         int ret = munmap(map, map->mmapSize());
-        if (ret == -1) {
-            raise(SIGTRAP);
-        } 
-        
+
         size_t old = s_outstandingPages--;
 
         // If there previously 0 pages, then we goofed and tried to free more pages
@@ -183,7 +180,12 @@ public:
             char* temp = this->m_next;
             totalSpaceUsed += arenaSize();
             totalSpaceUsedNoHeader += arenaSize();
+
             this->m_next = &this->m_data[totalSpaceUsed.load()];
+            if (temp == nullptr)
+            {
+                raise(SIGTRAP);
+            }
             return temp;
         }
         return nullptr;
@@ -220,7 +222,6 @@ public:
         return m_next;
     }
 };
-
 class ArenaStore {
     /**
      * A set of arenas with the following sizes:
@@ -241,52 +242,142 @@ public:
         if (bytes <= 8)
         {
             Arena* arena = m_arenas[0];
+            Arena* temp;
             if (arena == nullptr)
             {
                 Arena* newArena = Arena::create(8);
-                Arena* m_arenas[0] = newArena;
-                Arena* temp = newArena->alloc();
-                m_arenas[0] = temp;
+                temp = (Arena*)newArena->alloc();
             }
             else
             {
-                Arena* temp = arena->alloc();
-                m_arenas[0] = temp;
+                temp = (Arena*)arena->alloc();
             }
-            
+            m_arenas[0] = arena;
+            return temp;
         }
         else if (bytes <= 16)
         {
+            Arena* arena = m_arenas[1];
+            Arena* temp;
+            if (arena == nullptr)
+            {
+                Arena* newArena = Arena::create(16);
+                m_arenas[1] = newArena;
+                temp = (Arena*)newArena->alloc();
+            }
+            else
+            {
+                temp = (Arena*)arena->alloc();
+            }
+            m_arenas[1] = arena;
+            return temp;
         }
         else if (bytes <= 32)
         {
-            // 2
+            Arena* arena = m_arenas[2];
+            Arena* temp;
+            if (arena == nullptr)
+            {
+                Arena* newArena = Arena::create(32);
+                m_arenas[2] = newArena;
+                temp = (Arena*)newArena->alloc();
+            }
+            else
+            {
+                temp = (Arena*)arena->alloc();
+            }
+            m_arenas[2] = arena;
+            return temp;
         }
         else if (bytes <= 64)
         {
-            // 3
+            Arena* arena = m_arenas[3];
+            Arena* temp;
+            if (arena == nullptr)
+            {
+                Arena* newArena = Arena::create(64);
+                m_arenas[3] = newArena;
+                temp = (Arena*)newArena->alloc();
+            }
+            else
+            {
+                temp = (Arena*)arena->alloc();
+            }
+            m_arenas[3] = arena;
+            return temp;
         }
         else if (bytes <= 128)
         {
-            // 4
+            Arena* arena = m_arenas[4];
+            Arena* temp;
+            if (arena == nullptr)
+            {
+                Arena* newArena = Arena::create(128);
+                m_arenas[4] = newArena;
+                temp = (Arena*)newArena->alloc();
+            }
+            else
+            {
+                temp = (Arena*)arena->alloc();
+            }
+            m_arenas[4] = arena;
+            return temp;
         }
         else if (bytes <= 256)
         {
-            // 5
+            Arena* arena = m_arenas[5];
+            Arena* temp;
+            if (arena == nullptr)
+            {
+                Arena* newArena = Arena::create(256);
+                m_arenas[5] = newArena;
+                temp = (Arena*)newArena->alloc();
+            }
+            else
+            {
+                temp = (Arena*)arena->alloc();
+            }
+            m_arenas[5] = arena;
+            return temp;
         }
         else if (bytes <= 512)
         {
-            // 6
+            Arena* arena = m_arenas[6];
+            Arena* temp;
+            if (arena == nullptr)
+            {
+                Arena* newArena = Arena::create(512);
+                m_arenas[6] = newArena;
+                temp = (Arena*)newArena->alloc();
+            }
+            else
+            {
+                temp = (Arena*)arena->alloc();
+            }
+            m_arenas[6] = arena;
+            return temp;
         }
         else if (bytes <= 1024)
         {
-            // 7
+            Arena* arena = m_arenas[7];
+            Arena* temp;
+            if (arena == nullptr)
+            {
+                Arena* newArena = Arena::create(1024);
+                m_arenas[7] = newArena;
+                temp = (Arena*)newArena->alloc();
+            }
+            else
+            {
+                temp = (Arena*)arena->alloc();
+            }
+            m_arenas[7] = arena;
+            return temp;
         }
         else
         {
-            // big alloc
+            return BigAlloc::alloc(bytes);
         }
-        return nullptr;
     }
 
     /**
@@ -294,7 +385,20 @@ public:
      * the appropriate free method.
      */
     void free(void* ptr) {
-        // TODO: implement free.
+        uintptr_t n = reinterpret_cast<uintptr_t>(ptr); 
+        uintptr_t remainder = n % pageSize;
+        n = n - remainder;
+        MMapObject* map = reinterpret_cast<MMapObject*>(n);
+        if (map->arenaSize() == 0)
+        {
+            MMapObject::dealloc(ptr);
+        }
+        else
+        {
+            Arena* arena = (Arena*) map;
+            bool freed = arena->free();
+            MMapObject::dealloc(ptr);
+        }
     }
 };
 

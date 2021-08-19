@@ -1,19 +1,22 @@
 #include <Malloc.hpp>
 #include <sys/mman.h>
 
+thread_local ArenaStore a;
+
 /**
  * Your special drop-in replacement for malloc(). Should behave the same way.
  */
 void* myMalloc(size_t n) {
-    // auto ret = ArenaStore::alloc(n);
-    // return ret;
+    auto ret = a.alloc(n);
+    return ret;
 }
 
 /**
  * Your special drop-in replacement for free(). Should behave the same way.
  */
 void myFree(void* addr) {
-    // ArenaStore::free(addr);
+    a.free(addr);
 }
+
 
 std::atomic<size_t> MMapObject::s_outstandingPages = 0;
